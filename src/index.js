@@ -6,8 +6,13 @@ export default function register(Component, tagName, propNames, options) {
 		inst._vdomComponent = Component;
 		inst._root =
 			options && options.shadow ? inst.attachShadow({ mode: 'open' }) : inst;
+
+		inst._props = {};
+		inst._slots = {};
+
 		return inst;
 	}
+
 	PreactElement.prototype = Object.create(HTMLElement.prototype);
 	PreactElement.prototype.constructor = PreactElement;
 	PreactElement.prototype.connectedCallback = connectedCallback;
@@ -18,32 +23,32 @@ export default function register(Component, tagName, propNames, options) {
 		propNames ||
 		Component.observedAttributes ||
 		Object.keys(Component.propTypes || {});
-	PreactElement.observedAttributes = propNames;
 
-	// Keep DOM properties and Preact props in sync
+	PreactElement.observedAttributes = propNames.map((p) => toKebabCase(p));
+
 	propNames.forEach((name) => {
 		Object.defineProperty(PreactElement.prototype, name, {
 			get() {
-				return this._vdom.props[name];
+				return this._props[name];
 			},
 			set(v) {
-				if (this._vdom) {
-					this.attributeChangedCallback(name, null, v);
-				} else {
-					if (!this._props) this._props = {};
-					this._props[name] = v;
-					this.connectedCallback();
-				}
+				const oldVal = this._props[name] ?? null;
 
-				// Reflect property changes to attributes if the value is a primitive
-				const type = typeof v;
-				if (
-					v == null ||
-					type === 'string' ||
-					type === 'boolean' ||
-					type === 'number'
-				) {
-					this.setAttribute(name, v);
+				if (isPrimitive(v)) {
+					if (oldVal === v) return;
+					// don't call attributeChanged here manually
+					// just reflect it to attribute and let WC API call attributeChanged implicitly
+
+					// html attributes are case insesitive,
+					// convert to kebab-case just in case of camelCase
+					this.setAttribute(toKebabCase(name), v);
+				} else {
+					// complex props cannot be reflected to attributes
+					// trigger attributeChanged manually to re-render
+
+					// convert to kebab-case to mimic how custom components
+					// would call it, since attributes cannot be camelCase
+					this.attributeChangedCallback(toKebabCase(name), oldVal, v);
 				}
 			},
 		});
@@ -56,108 +61,158 @@ export default function register(Component, tagName, propNames, options) {
 }
 
 function ContextProvider(props) {
-	this.getChildContext = () => props.context;
-	// eslint-disable-next-line no-unused-vars
-	const { context, children, ...rest } = props;
-	return cloneElement(children, rest);
+	const { children, context } = props;
+	this.getChildContext = () => context;
+	return children;
 }
 
+ContextProvider.displayName = 'ContextProvider';
+
 function connectedCallback() {
-	// Obtain a reference to the previous context by pinging the nearest
-	// higher up node that was rendered with Preact. If one Preact component
-	// higher up receives our ping, it will set the `detail` property of
-	// our custom event. This works because events are dispatched
-	// synchronously.
-	const event = new CustomEvent('_preact', {
-		detail: {},
+	// child element without slot attribute belongs to default slot
+	// and will be provided as children prop
+	// named slots will be provided as props named based on slot attribute value
+	const { '': children, ...namedSlots } = getSlots(this);
+	this._slots = { children, ...namedSlots };
+
+	const event = new CustomEvent('_preact-ctx', {
+		composed: true,
 		bubbles: true,
 		cancelable: true,
+		detail: {},
 	});
-	this.dispatchEvent(event);
+
+	// fire an event to obtain context
+	// the listener in the parent will set the detail of the event to the context
+	this._root.dispatchEvent(event);
 	const context = event.detail.context;
 
 	this._vdom = h(
 		ContextProvider,
-		{ ...this._props, context },
-		toVdom(this, this._vdomComponent)
+		{ context },
+		h(this._vdomComponent, { ...this._props, ...this._slots })
 	);
+
 	(this.hasAttribute('hydrate') ? hydrate : render)(this._vdom, this._root);
 }
 
+function disconnectedCallback() {
+	this._props = {};
+	this._slots = {};
+	render((this._vdom = null), this._root);
+}
+
+function attributeChangedCallback(name, oldVal, newVal) {
+	// replace null by undefined
+	newVal = newVal == null ? undefined : newVal;
+
+	if (newVal === oldVal) return;
+
+	this._props[toCamelCase(name)] = newVal;
+	// name is always kebab-case so no need to call toKebabCase()
+	this._props[name] = newVal;
+
+	// if it was not connected to dom yet
+	// then no need to re-render yet
+	// this happens when the element is created e.g. document.createElement('x-element');
+	// but not appended to dom.
+	// attributeChangedCallback will be still called if we set attributes or props on the instance
+	if (!this._vdom) return;
+
+	// each component is wrapped inside ContextProvider (to provide context over WC boundaries)
+	// this._vdom is ContextProvider
+	// we clone it to keep the context object (we provide null not to override it)
+	// and as a child we provide the actual component with updated props
+	this._vdom = cloneElement(
+		this._vdom,
+		null,
+		h(this._vdomComponent, { ...this._props, ...this._slots })
+	);
+	render(this._vdom, this._root);
+}
+
+/**
+ * @param prop
+ * @return {Boolean}
+ */
+function isPrimitive(prop) {
+	if (prop == null) return true;
+	return ['string', 'boolean', 'number'].includes(typeof prop);
+}
+
+/**
+ * Return slots as vdom
+ *
+ * Example:
+ * slots = {
+ * 	'': VNode[], // slot without a name is default
+ * 	header: VNode[]
+ * }
+ *
+ * @param {HTMLElement} el
+ */
+function getSlots(el) {
+	const slots = {};
+
+	for (const childNode of el.childNodes) {
+		if (![Node.TEXT_NODE, Node.ELEMENT_NODE].includes(childNode.nodeType))
+			continue;
+
+		const slotName = childNode.slot; // child node without a slot attribute is ''
+		if (!slots[slotName]) slots[slotName] = [];
+		// create empty slot element for each child node
+		// then we provide those empty slot elements as props to the component
+		// and component decides where to place (render) them
+		// the actual children will be slotted natively as specified in html standards
+		const slot = h(Slot, { name: slotName || undefined });
+		slots[slotName].push(slot);
+	}
+
+	return slots;
+}
+
+// Slot has access to context
+// because parent of the Slot is wrapped by ContextProvider
+// which provide context via getChildContext()
+function Slot(props, context) {
+	const ref = (el) => {
+		if (!el) {
+			this.el?.removeEventListener('_preact-ctx', this.listener);
+		} else {
+			this.el = el;
+			if (!this.listener) {
+				this.listener = (e) => {
+					e.stopPropagation();
+					// add context on the detail so emitter can read it
+					e.detail.context = context;
+				};
+			}
+
+			el.addEventListener('_preact-ctx', this.listener);
+		}
+	};
+
+	// render native slot element with a name given in props
+	return h('slot', { ...props, ref });
+}
+
+Slot.displayName = 'Slot';
+
+/**
+ * @param {String} str
+ * @return {String}
+ */
 function toCamelCase(str) {
 	return str.replace(/-(\w)/g, (_, c) => (c ? c.toUpperCase() : ''));
 }
 
-function attributeChangedCallback(name, oldValue, newValue) {
-	if (!this._vdom) return;
-	// Attributes use `null` as an empty value whereas `undefined` is more
-	// common in pure JS components, especially with default parameters.
-	// When calling `node.removeAttribute()` we'll receive `null` as the new
-	// value. See issue #50.
-	newValue = newValue == null ? undefined : newValue;
-	const props = {};
-	props[name] = newValue;
-	props[toCamelCase(name)] = newValue;
-	this._vdom = cloneElement(this._vdom, props);
-	render(this._vdom, this._root);
-}
-
-function disconnectedCallback() {
-	render((this._vdom = null), this._root);
-}
-
 /**
- * Pass an event listener to each `<slot>` that "forwards" the current
- * context value to the rendered child. The child will trigger a custom
- * event, where will add the context value to. Because events work
- * synchronously, the child can immediately pull of the value right
- * after having fired the event.
+ * @param {String} str
+ * @return {String}
  */
-function Slot(props, context) {
-	const ref = (r) => {
-		if (!r) {
-			this.ref.removeEventListener('_preact', this._listener);
-		} else {
-			this.ref = r;
-			if (!this._listener) {
-				this._listener = (event) => {
-					event.stopPropagation();
-					event.detail.context = context;
-				};
-				r.addEventListener('_preact', this._listener);
-			}
-		}
-	};
-	return h('slot', { ...props, ref });
-}
-
-function toVdom(element, nodeName) {
-	if (element.nodeType === 3) return element.data;
-	if (element.nodeType !== 1) return null;
-	let children = [],
-		props = {},
-		i = 0,
-		a = element.attributes,
-		cn = element.childNodes;
-	for (i = a.length; i--; ) {
-		if (a[i].name !== 'slot') {
-			props[a[i].name] = a[i].value;
-			props[toCamelCase(a[i].name)] = a[i].value;
-		}
-	}
-
-	for (i = cn.length; i--; ) {
-		const vnode = toVdom(cn[i], null);
-		// Move slots correctly
-		const name = cn[i].slot;
-		if (name) {
-			props[name] = h(Slot, { name }, vnode);
-		} else {
-			children[i] = vnode;
-		}
-	}
-
-	// Only wrap the topmost node with a slot
-	const wrappedChildren = nodeName ? h(Slot, null, children) : children;
-	return h(nodeName || element.nodeName.toLowerCase(), props, wrappedChildren);
+function toKebabCase(str) {
+	return str.replace(
+		/[A-Z]+(?![a-z])|[A-Z]/g,
+		($, c) => (c ? '-' : '') + $.toLowerCase()
+	);
 }

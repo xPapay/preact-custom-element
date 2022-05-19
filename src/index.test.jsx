@@ -164,20 +164,30 @@ describe('web components', () => {
 			'<x-foo><div>no slot</div><span slot="text">here is a slot</span></x-foo>'
 		);
 
-		const shadowHTML = document.querySelector('x-foo').shadowRoot.innerHTML;
+		const xFooShadowRoot = document.querySelector('x-foo').shadowRoot;
+
 		assert.equal(
-			shadowHTML,
-			'<span class="wrapper"><div class="children"><slot><div>no slot</div></slot></div><div class="slotted"><slot name="text"><span>here is a slot</span></slot></div></span>'
+			xFooShadowRoot.innerHTML,
+			'<span class="wrapper"><div class="children"><slot></slot></div><div class="slotted"><slot name="text"></slot></div></span>'
+		);
+
+		assert.equal(
+			noSlot.assignedSlot,
+			xFooShadowRoot.querySelector('slot:not([name])')
+		);
+
+		assert.equal(
+			slot.assignedSlot,
+			xFooShadowRoot.querySelector('slot[name="text"]')
 		);
 	});
 
-	const kebabName = 'custom-date-long-name';
-	const camelName = 'customDateLongName';
-	const lowerName = camelName.toLowerCase();
+	const kebabName = 'kebab-name';
+	const camelName = 'camelName';
 	function PropNameTransform(props) {
 		return (
 			<span>
-				{props[kebabName]} {props[lowerName]} {props[camelName]}
+				{props[kebabName]}, {props[camelName]}
 			</span>
 		);
 	}
@@ -186,22 +196,26 @@ describe('web components', () => {
 		camelName,
 	]);
 
-	it('handles kebab-case attributes with passthrough', () => {
+	it.only('handles mapping kebab-case and camelCase props to attributes', () => {
 		const el = document.createElement('x-prop-name-transform');
-		el.setAttribute(kebabName, '11/11/2011');
-		el.setAttribute(camelName, 'pretended to be camel');
+		el[kebabName] = 'kebab name value';
+		el[camelName] = 'camel name value';
+		// el.setAttribute(kebabName, '11/11/2011');
+		// el.setAttribute(camelName, 'pretended to be camel');
 
 		root.appendChild(el);
 		assert.equal(
 			root.innerHTML,
-			`<x-prop-name-transform ${kebabName}="11/11/2011" ${lowerName}="pretended to be camel"><span>11/11/2011 pretended to be camel 11/11/2011</span></x-prop-name-transform>`
+			`<x-prop-name-transform kebab-name="kebab name value" camel-name="camel name value"><span>kebab name value, camel name value</span></x-prop-name-transform>`
 		);
 
-		el.setAttribute(kebabName, '01/01/2001');
+		el.setAttribute(kebabName, 'updated kebab value');
 		assert.equal(
 			root.innerHTML,
-			`<x-prop-name-transform ${kebabName}="01/01/2001" ${lowerName}="pretended to be camel"><span>01/01/2001 pretended to be camel 01/01/2001</span></x-prop-name-transform>`
+			`<x-prop-name-transform kebab-name="updated kebab value" camel-name="camel name value"><span>updated kebab value, camel name value</span></x-prop-name-transform>`
 		);
+
+		assert.equal(el[kebabName], 'updated kebab value');
 	});
 
 	const Theme = createContext('light');
