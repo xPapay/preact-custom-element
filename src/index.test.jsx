@@ -1,5 +1,5 @@
 import { assert } from '@open-wc/testing';
-import { h, createContext } from 'preact';
+import { h, createContext, render } from 'preact';
 import { useContext } from 'preact/hooks';
 import { act } from 'preact/test-utils';
 import registerElement from './index';
@@ -130,6 +130,81 @@ describe('web components', () => {
 			});
 			assert.equal(other, 1);
 		});
+	});
+
+	function DummyForm(props) {
+		const { onSubmit, onSave } = props;
+		return (
+			<div>
+				<button onClick={onSubmit} id="btn-onSubmit">
+					onSubmit
+				</button>
+				<button onClick={props['on-click']} id="btn-on-click">
+					on-click
+				</button>
+				<button onClick={onSave} id="btn-onSave">
+					onSave
+				</button>
+				<button onClick={props['on-print']} id="btn-on-print">
+					on-print
+				</button>
+			</div>
+		);
+	}
+
+	registerElement(DummyForm, 'x-dummy-form', [
+		'onSubmit',
+		'on-click',
+		'onSave',
+		'on-print',
+	]);
+
+	it('passes callbacks prefixed with "on" as props into the wc when rendered in preact', async () => {
+		let submits = 0;
+		const onSubmit = () => submits++;
+
+		let clicks = 0;
+		const onClick = () => clicks++;
+
+		let saves = 0;
+		const onSave = () => saves++;
+
+		let prints = 0;
+		const onPrint = () => prints++;
+
+		render(
+			h('x-dummy-form', {
+				onSubmit,
+				'on-click': onClick,
+				onSave,
+				'on-print': onPrint,
+			}),
+			root
+		);
+
+		act(() => {
+			root.querySelector('x-dummy-form #btn-onSubmit').click();
+		});
+
+		assert.equal(submits, 1);
+
+		act(() => {
+			root.querySelector('x-dummy-form #btn-on-click').click();
+		});
+
+		assert.equal(clicks, 1);
+
+		act(() => {
+			root.querySelector('x-dummy-form #btn-onSave').click();
+		});
+
+		assert.equal(saves, 1);
+
+		act(() => {
+			root.querySelector('x-dummy-form #btn-on-print').click();
+		});
+
+		assert.equal(prints, 1);
 	});
 
 	function Foo({ text, children }) {

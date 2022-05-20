@@ -10,6 +10,21 @@ export default function register(Component, tagName, propNames, options) {
 		inst._props = {};
 		inst._slots = {};
 
+		// preact renderer registers all props prefixed with "on" as event listeners
+		// and sets all listeners as "l" prop on the instance
+		// instad of passing them to WC
+		inst.l = new Proxy(
+			{},
+			{
+				set(target, prop, val) {
+					const name = `on${capitalize(prop)}`.replace(/(true)|(false)/, '');
+					target[prop] = val;
+					inst._props[name] = val;
+					return true;
+				},
+			}
+		);
+
 		return inst;
 	}
 
@@ -215,4 +230,13 @@ function toKebabCase(str) {
 		/[A-Z]+(?![a-z])|[A-Z]/g,
 		($, c) => (c ? '-' : '') + $.toLowerCase()
 	);
+}
+
+/**
+ * Capitalize first letter
+ * @param {String} str
+ * @return {String}
+ */
+function capitalize(str) {
+	return str.charAt(0).toUpperCase() + str.slice(1);
 }
