@@ -19,7 +19,16 @@ export default function register(Component, tagName, propNames, options) {
 				set(target, prop, val) {
 					const name = `on${capitalize(prop)}`.replace(/(true)|(false)/, '');
 					target[prop] = val;
-					inst._props[name] = val;
+
+					if (propNames.includes(name)) {
+						// if it is observed attribute "remove" the handler
+						// which preact renderer registered as handler for the native event
+						// e.g. prevent onClick from being called twice when wc rendered in preact
+						target[prop] = () => null;
+
+						inst._props[name] = val;
+					}
+
 					return true;
 				},
 			}

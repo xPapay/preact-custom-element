@@ -207,6 +207,20 @@ describe('web components', () => {
 		assert.equal(prints, 1);
 	});
 
+	it('does not register native listener when rendering wc in preact when prop is observed attribute', async () => {
+		let clicks = 0;
+		const onClick = () => clicks++;
+
+		render(h('x-dummy-button', { onClick }), root);
+
+		act(() => {
+			root.querySelector('x-dummy-button button').click();
+		});
+
+		assert.notEqual(clicks, 2);
+		assert.equal(clicks, 1);
+	});
+
 	function Foo({ text, children }) {
 		return (
 			<span class="wrapper">
@@ -271,7 +285,7 @@ describe('web components', () => {
 		camelName,
 	]);
 
-	it.only('handles mapping kebab-case and camelCase props to attributes', () => {
+	it('handles mapping kebab-case and camelCase props to attributes', () => {
 		const el = document.createElement('x-prop-name-transform');
 		el[kebabName] = 'kebab name value';
 		el[camelName] = 'camel name value';
