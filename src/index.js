@@ -26,7 +26,8 @@ export default function register(Component, tagName, propNames, options) {
 						// e.g. prevent onClick from being called twice when wc rendered in preact
 						target[prop] = () => null;
 
-						inst._props[name] = val;
+						const oldVal = inst._props[name];
+						inst.attributeChangedCallback(toKebabCase(name), oldVal, val);
 					}
 
 					return true;
