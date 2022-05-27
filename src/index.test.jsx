@@ -228,6 +228,40 @@ describe('web components', () => {
 		assert.equal(clicks, 1);
 	});
 
+	it('it bypass native handler when use kebab-case in preact renderer', async () => {
+		// given I registered dummy button with observed attribute onClick (camelCase)
+		let clicks = 0;
+		const onClick = () => clicks++;
+
+		render(
+			h('x-dummy-button', {
+				onClick,
+			}),
+			root
+		);
+
+		act(() => {
+			root.querySelector('button').click();
+		});
+
+		assert.equal(clicks, 2);
+
+		render(
+			h('x-dummy-button', {
+				'on-click': onClick,
+			}),
+			root
+		);
+
+		clicks = 0;
+
+		act(() => {
+			root.querySelector('button').click();
+		});
+
+		assert.equal(clicks, 1);
+	});
+
 	function Foo({ text, children }) {
 		return (
 			<span class="wrapper">
