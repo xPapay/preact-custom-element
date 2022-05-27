@@ -207,17 +207,24 @@ describe('web components', () => {
 		assert.equal(prints, 1);
 	});
 
-	it('does not register native listener when rendering wc in preact when prop is observed attribute', async () => {
+	it('it creates setter for both camelCase and kebab-case variants', async () => {
+		// given I registered dummy button with observed attribute onClick (camelCase)
+
+		const el = document.createElement('x-dummy-button');
+
 		let clicks = 0;
 		const onClick = () => clicks++;
 
-		render(h('x-dummy-button', { onClick }), root);
+		el['on-click'] = onClick;
+
+		assert.equal(el.onClick, onClick);
+
+		root.appendChild(el);
 
 		act(() => {
-			root.querySelector('x-dummy-button button').click();
+			el.querySelector('button').click();
 		});
 
-		assert.notEqual(clicks, 2);
 		assert.equal(clicks, 1);
 	});
 

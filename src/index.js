@@ -24,7 +24,7 @@ export default function register(Component, tagName, propNames, options) {
 						// if it is observed attribute "remove" the handler
 						// which preact renderer registered as handler for the native event
 						// e.g. prevent onClick from being called twice when wc rendered in preact
-						target[prop] = () => null;
+						// target[prop] = () => null;
 
 						const oldVal = inst._props[name];
 						inst.attributeChangedCallback(toKebabCase(name), oldVal, val);
@@ -51,7 +51,10 @@ export default function register(Component, tagName, propNames, options) {
 
 	PreactElement.observedAttributes = propNames.map((p) => toKebabCase(p));
 
-	propNames.forEach((name) => {
+	new Set([
+		...propNames.map((p) => toCamelCase(p)),
+		...propNames.map((p) => toKebabCase(p)),
+	]).forEach((name) => {
 		Object.defineProperty(PreactElement.prototype, name, {
 			get() {
 				return this._props[name];
