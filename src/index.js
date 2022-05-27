@@ -49,12 +49,18 @@ export default function register(Component, tagName, propNames, options) {
 		Component.observedAttributes ||
 		Object.keys(Component.propTypes || {});
 
-	PreactElement.observedAttributes = propNames.map((p) => toKebabCase(p));
+	propNames = Array.from(
+		new Set([
+			...propNames.map((p) => toCamelCase(p)),
+			...propNames.map((p) => toKebabCase(p)),
+		])
+	);
 
-	new Set([
-		...propNames.map((p) => toCamelCase(p)),
-		...propNames.map((p) => toKebabCase(p)),
-	]).forEach((name) => {
+	PreactElement.observedAttributes = Array.from(
+		new Set(propNames.map((p) => toKebabCase(p)))
+	);
+
+	propNames.forEach((name) => {
 		Object.defineProperty(PreactElement.prototype, name, {
 			get() {
 				return this._props[name];
