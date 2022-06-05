@@ -138,7 +138,12 @@ function disconnectedCallback() {
 
 function attributeChangedCallback(name, oldVal, newVal) {
 	// replace null by undefined
-	newVal = newVal == null ? undefined : newVal;
+	newVal =
+		newVal == null
+			? undefined
+			: isDomElement(newVal)
+			? nodeToVNode(newVal)
+			: newVal;
 
 	if (newVal === oldVal) return;
 
@@ -174,6 +179,10 @@ function isPrimitive(prop) {
 	return ['string', 'boolean', 'number'].includes(typeof prop);
 }
 
+function isDomElement(obj) {
+	return !!(obj && [Node.TEXT_NODE, Node.ELEMENT_NODE].includes(obj.nodeType));
+}
+
 /**
  * Return slots as vdom
  *
@@ -189,8 +198,7 @@ function getSlots(el) {
 	const slots = {};
 
 	for (const childNode of el.childNodes) {
-		if (![Node.TEXT_NODE, Node.ELEMENT_NODE].includes(childNode.nodeType))
-			continue;
+		if (!isDomElement(childNode)) continue;
 
 		const slotName = childNode.slot; // child node without a slot attribute is ''
 		if (!slots[slotName]) slots[slotName] = [];
@@ -249,6 +257,33 @@ function toKebabCase(str) {
 		/[A-Z]+(?![a-z])|[A-Z]/g,
 		($, c) => (c ? '-' : '') + $.toLowerCase()
 	);
+}
+
+/**
+ * @param {import('preact').VNode} node
+ * @return {import('preact').VNode}
+ */
+function nodeToVNode(node) {
+	if (node.nodeType === Node.TEXT_NODE) return node.data;
+	if (node.nodeType !== Node.ELEMENT_NODE) return null;
+
+	/** @type {Element} el */
+	const el = node;
+
+	let props = {};
+	let children = [];
+
+	for (const attr of el.attributes) {
+		if (attr.name === 'slot') continue;
+
+		props[attr.name] = attr.value;
+	}
+
+	for (let childNode of el.childNodes) {
+		children.push(nodeToVNode(childNode));
+	}
+
+	return h(el.nodeName.toLowerCase(), props, children);
 }
 
 /**
