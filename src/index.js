@@ -7,6 +7,12 @@ export default function register(Component, tagName, propNames, options) {
 		inst._root =
 			options && options.shadow ? inst.attachShadow({ mode: 'open' }) : inst;
 
+		if (options && options.shadow && options.styles) {
+			const $styles = document.createElement('style');
+			$styles.textContent = options.styles;
+			inst._root.appendChild($styles);
+		}
+
 		inst._props = {};
 		inst._slots = {};
 
