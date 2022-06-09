@@ -1,13 +1,26 @@
 import { h, cloneElement, render, hydrate } from 'preact';
 
 export default function register(Component, tagName, propNames, options) {
+	if (
+		customElements.get(tagName) &&
+		customElements.get(tagName) === Component
+	) {
+		console.warn(`Element with tagname: "${tagName}" was already registered`);
+	}
+
+	if (options.styles && !options.shadow) {
+		throw new Error(
+			'Styles can be provided only when sadow dom enabled. Please set shadow: true'
+		);
+	}
+
 	function PreactElement() {
 		const inst = Reflect.construct(HTMLElement, [], PreactElement);
 		inst._vdomComponent = Component;
 		inst._root =
 			options && options.shadow ? inst.attachShadow({ mode: 'open' }) : inst;
 
-		if (options && options.shadow && options.styles) {
+		if (options && options.styles) {
 			const $styles = document.createElement('style');
 			$styles.textContent = options.styles;
 			inst._root.appendChild($styles);
